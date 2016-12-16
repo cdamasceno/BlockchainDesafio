@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "query",
+  "params": {
+    "type": 1,
+    "chaincodeID": {
+      "name": "9783fab5717b688f725ca3e216e978a65457a51c5f5c672ae0d2618f85575841cdbfc312e0ad137960cfd58b530603b1830a2aa9e81d62ecbb59f65f87f7bb82"
+    },
+    "ctorMsg": {
+      "function": "consultarProposta",
+      "args": [
+        "reg0"
+      ]
+    },
+    "secureContext": "WebAppAdmin"
+  },
+  "id": 0
+}
