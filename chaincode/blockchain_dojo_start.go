@@ -27,6 +27,8 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"io/ioutil"
+	"bytes"
 	"errors"
 	"fmt"
 	"strconv"
@@ -272,7 +274,7 @@ func (t *BoletoPropostaChaincode) registrarProposta(stub shim.ChaincodeStubInter
 
 		// Formato:
 		// { "id_proposta": "da39a3ee5e6b4b0d3255bf", "cpf_pagador": "373.745.808.20", "boletoPago": true }
-		jsonToSend = fmt.Sprintf("{ \"id_proposta\": \"%s\", \"cpf_pagador\": \"%s\", \"boletoPago\": true }", idProposta, cpfPagador)
+		jsonToSend := fmt.Sprintf("{ \"id_proposta\": \"%s\", \"cpf_pagador\": \"%s\", \"boletoPago\": true }", idProposta, cpfPagador)
 
 		var jsonStr = []byte(jsonToSend)
 		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
