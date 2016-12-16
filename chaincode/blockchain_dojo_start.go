@@ -26,6 +26,7 @@ package main
 // "strconv" -> conversor de strings
 import (
 	"encoding/json"
+	"net/http"
 	"errors"
 	"fmt"
 	"strconv"
@@ -226,7 +227,6 @@ func (t *BoletoPropostaChaincode) registrarProposta(stub shim.ChaincodeStubInter
 
 	fmt.Printf("registrarProposta(%s, %s, %s, %s, %s, %s, %s)", args[0], args[1], args[2], args[3], args[4], args[5], args[6])
 
-
 	// Registra a proposta na tabela 'Proposta'
 	var columns []*shim.Column
 	col1 := shim.Column{Value: &shim.Column_String_{String_: idProposta}}
@@ -265,6 +265,32 @@ func (t *BoletoPropostaChaincode) registrarProposta(stub shim.ChaincodeStubInter
 	}
 	
 	fmt.Println("Proposta criada!")
+
+	if boletoEmitido && assinaturaBeneficiario && assinaturaIFBeneficiario {
+		url := "https://bc-desafio.mybluemix.net/atualizar"
+		fmt.Println("URL:>", url)
+
+		// Formato:
+		// { "id_proposta": "da39a3ee5e6b4b0d3255bf", "cpf_pagador": "373.745.808.20", "boletoPago": true }
+		jsonToSend = fmt.Sprintf("{ \"id_proposta\": \"%s\", \"cpf_pagador\": \"%s\", \"boletoPago\": true }", idProposta, cpfPagador)
+
+		var jsonStr = []byte(jsonToSend)
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+
+		fmt.Println("response Status:", resp.Status)
+		fmt.Println("response Headers:", resp.Header)
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Println("response Body:", string(body))
+	}
+
 
 	return nil, nil
 }
