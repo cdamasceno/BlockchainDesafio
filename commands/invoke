@@ -1,0 +1,19 @@
+{
+  "jsonrpc": "2.0",
+  "method": "invoke",
+  "params": {
+    "type": 1,
+    "chaincodeID": {
+      "name": "9783fab5717b688f725ca3e216e978a65457a51c5f5c672ae0d2618f85575841cdbfc312e0ad137960cfd58b530603b1830a2aa9e81d62ecbb59f65f87f7bb82"
+    },
+    "ctorMsg": {
+      "function": "registrarProposta",
+      "args": [
+        "reg0", "valor do aceite 2", "999.999.999-99", "12345678901234", "true", "true", "false"
+      ]
+    },
+    "secureContext": "WebAppAdmin",
+    "metadata": [100, 101, 102, 103]
+  },
+  "id": 0
+}

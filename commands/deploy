@@ -1,0 +1,18 @@
+{
+  "jsonrpc": "2.0",
+  "method": "deploy",
+  "params": {
+    "type": 1,
+    "chaincodeID": {
+      "path": "https://github.com/rsuzuki/BlockchainDesafio/chaincode"
+    },
+    "ctorMsg": {
+      "function": "init",
+      "args": [
+      ]
+    },
+    "secureContext": "WebAppAdmin",
+    "metadata": [100, 101, 102, 103]
+  },
+  "id": 0
+}

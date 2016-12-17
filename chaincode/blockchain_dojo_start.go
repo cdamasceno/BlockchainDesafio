@@ -25,9 +25,14 @@ package main
 // "encoding/json"	-> enconding para json
 // "strconv" -> conversor de strings
 import (
+	"encoding/json"
+	"net/http"
+	"io/ioutil"
+	"bytes"
 	"errors"
 	"fmt"
-
+	"strconv"
+	"reflect"
 	
 	"github.com/hyperledger/fabric/core/chaincode/shim"	
 )
@@ -39,21 +44,27 @@ type BoletoPropostaChaincode struct {
 
 
 // Definição da Struct Proposta e parametros para exportação para JSON
-
-
-
-
-
-
+type Proposta struct {
+	IdProposta                string  `json:"idProposta"`
+	DadosAceite               string  `json:"dadosAceite"`
+	CpfPagador                string  `json:"cpfPagador"`
+	CNPJBeneficiario		  string  `json:"cnpjBeneficiario"`	
+	BoletoEmitido             bool    `json:"boletoEmitido"`
+	AssinaturaBeneficiario    bool    `json:"assinaturaBeneficiario"`
+	AssinaturaIFBeneficiario  bool    `json:"assinaturaIFBeneficiario"`
+}
 
 // consts associadas à tabela de Propostas
-
-
-
-
-
-
-
+const (
+	tableName                   = "Proposta"
+	colIdProposta               = "idProposta"
+	colDadosAceite              = "dadosAceite"
+	colCpfPagador               = "cpfPagador"
+	colCNPJBeneficiario         = "cnpjBeneficiario"
+	colBoletoEmitido            = "boletoEmitido"
+	colAssinaturaBeneficiario   = "assinaturaBeneficiario"
+	colAssinaturaIFBeneficiario = "assinaturaIFBeneficiario"
+)
 
 // ============================================================================================================================
 // Main
@@ -73,41 +84,63 @@ func (t *BoletoPropostaChaincode) Init(stub shim.ChaincodeStubInterface, functio
 	fmt.Println("Init Chaincode...")
 
 	// Verificação da quantidade de argumentos recebidos
-
-
-
-
+	if len(args) != 0 {
+		return nil, errors.New("Número de argumentos incorreto.")
+	}
 
 	// Verifica se a tabela 'Proposta' existe
 	fmt.Println("Verificando se a tabela 'Proposta' existe...")
+	table, err := stub.GetTable(tableName)
 	
-
-
 	// Se a tabela 'Proposta' já existir, excluir a tabela
+	if table != nil {
+		err := stub.DeleteTable(tableName)
+		if err != nil {
+			return nil, fmt.Errorf("Erro ao excluir tabela %s", err)
+		}
+	}
 	
-
-
-
-
-
 	// Criar tabela de Propostas
 	fmt.Println("Criando a tabela 'Proposta'...")
+
+	var columnDefs []*shim.ColumnDefinition
+	colIdPropostaDef               := shim.ColumnDefinition{Name: colIdProposta, Type: shim.ColumnDefinition_STRING, Key: true}
+	colDadosAceiteDef              := shim.ColumnDefinition{Name: colDadosAceite, Type: shim.ColumnDefinition_STRING, Key: false}
+	colCpfPagadorDef               := shim.ColumnDefinition{Name: colCpfPagador, Type: shim.ColumnDefinition_STRING, Key: true}
+	colCNPJBeneficiario            := shim.ColumnDefinition{Name: colCNPJBeneficiario, Type: shim.ColumnDefinition_STRING, Key: true}
+	colBoletoEmitidoDef            := shim.ColumnDefinition{Name: colBoletoEmitido, Type: shim.ColumnDefinition_BOOL, Key: false}
+	colAssinaturaBeneficiarioDef   := shim.ColumnDefinition{Name: colAssinaturaBeneficiario, Type: shim.ColumnDefinition_BOOL, Key: false}
+	colAssinaturaIFBeneficiarioDef := shim.ColumnDefinition{Name: colAssinaturaIFBeneficiario, Type: shim.ColumnDefinition_BOOL, Key: false}
+
+	columnDefs = append(columnDefs, &colIdPropostaDef)
+	columnDefs = append(columnDefs, &colDadosAceiteDef)
+	columnDefs = append(columnDefs, &colCpfPagadorDef)
+	columnDefs = append(columnDefs, &colCNPJBeneficiario)
+	columnDefs = append(columnDefs, &colBoletoEmitidoDef)
+	columnDefs = append(columnDefs, &colAssinaturaBeneficiarioDef)
+	columnDefs = append(columnDefs, &colAssinaturaIFBeneficiarioDef)
 	
-
-
-
-
-
-
-
-
-
-
-
-
-
+	createErr := stub.CreateTable(tableName, columnDefs)
+	if createErr != nil {
+		return nil, fmt.Errorf("Erro ao criar tabela %s", err)
+	}
 
 	fmt.Println("Tabela 'Proposta' criada com sucesso.")
+
+	// Set the admin
+	// The metadata will contain the certificate of the administrator
+	adminMeta, err := stub.GetCallerMetadata()
+	if err != nil {
+		fmt.Println("Failed getting metadata")
+		//return nil, errors.New("Failed getting metadata.")
+	}
+	if len(adminMeta) == 0 {
+		fmt.Println("Invalid admin certificate (adminMeta). Empty.")
+		//return nil, errors.New("Invalid admin certificate (adminMeta). Empty.")
+	}
+	stub.PutState("admin", adminMeta)
+
+	fmt.Println("The administrator is (adminMeta) [%x]", adminMeta)
 
 	fmt.Println("Init Chaincode... Finalizado!")
 
@@ -128,13 +161,32 @@ func (t *BoletoPropostaChaincode) Invoke(stub shim.ChaincodeStubInterface, funct
 	fmt.Println("Invoke Chaincode...")
 	fmt.Println("invoke is running " + function)
 
+	// Verify the identity of the caller
+	// Only an administrator can invoker assign
+	adminCertificate, err := stub.GetState("admin")
+	if err != nil {
+		return nil, errors.New("Failed fetching admin identity")
+	}
+
+	ok, err := t.isCaller(stub, adminCertificate)
+	if err != nil {
+		fmt.Println("isCalled error")
+		return nil, errors.New("Failed checking admin identity")
+	}
+	if !ok {
+		fmt.Println("isCalled !ok")
+		return nil, errors.New("The caller is not an administrator")
+	}
+
 	// Estrutura de Seleção para escolher qual função será executada, 
 	// de acordo com a funcao chamada
-	
+	switch function {
+		case "init":
+		return t.Init(stub, "init", args) 
 
-
-
-
+		case "registrarProposta":
+		return t.registrarProposta(stub, args)
+	}
 
 	fmt.Println("invoke não encontrou a func: " + function) //error
 
@@ -151,59 +203,97 @@ func (t *BoletoPropostaChaincode) registrarProposta(stub shim.ChaincodeStubInter
 	fmt.Println("registrarProposta...")
 
 	// Verifica se a quantidade de argumentos recebidas corresponde a esperada
-
-
-
-
+	if len(args) != 7 {
+		return nil, errors.New("Incorrect len.")
+	}
 
 	// Obtem os valores da array de arguments (args) e 
 	// os converte no tipo necessário para salvar na tabela 'Proposta'
+	idProposta       := args[0]
+	dadosAceite      := args[1]
+	cpfPagador       := args[2]
+	cnpjBeneficiario := args[3]
 
+	boletoEmitido, err := strconv.ParseBool(args[4])
+	if err != nil {
+		return nil, errors.New("registrarProposta failed. ParseBool failed")
+	}
+	assinaturaBeneficiario, err := strconv.ParseBool(args[5])
+	if err != nil {
+		return nil, errors.New("registrarProposta failed. ParseBool failed")
+	}
+	assinaturaIFBeneficiario, err := strconv.ParseBool(args[6])
+	if err != nil {
+		return nil, errors.New("registrarProposta failed. ParseBool failed")
+	}
 
-
-
-
-
-
-
-
-
-
-
-
+	fmt.Printf("registrarProposta(%s, %s, %s, %s, %s, %s, %s)", args[0], args[1], args[2], args[3], args[4], args[5], args[6])
 
 	// Registra a proposta na tabela 'Proposta'
+	var columns []*shim.Column
+	col1 := shim.Column{Value: &shim.Column_String_{String_: idProposta}}
+	col2 := shim.Column{Value: &shim.Column_String_{String_: dadosAceite}}
+	col3 := shim.Column{Value: &shim.Column_String_{String_: cpfPagador}}
+	col4 := shim.Column{Value: &shim.Column_String_{String_: cnpjBeneficiario}}
+	col5 := shim.Column{Value: &shim.Column_Bool{Bool: boletoEmitido}}
+	col6 := shim.Column{Value: &shim.Column_Bool{Bool: assinaturaBeneficiario}}
+	col7 := shim.Column{Value: &shim.Column_Bool{Bool: assinaturaIFBeneficiario}}
+
+	columns = append(columns, &col1)
+	columns = append(columns, &col2)
+	columns = append(columns, &col3)
+	columns = append(columns, &col4)
+	columns = append(columns, &col5)
+	columns = append(columns, &col6)
+	columns = append(columns, &col7)
+
+	row := shim.Row{Columns: columns}
+	ok, err := stub.InsertRow(tableName, row)
+	if err != nil {
+		return nil, fmt.Errorf("registrarProposta (insert) failed. %s", err)
+	}
 	
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 	// Caso a proposta já exista
-	
+	if !ok {
 		// Trecho para atualizar uma proposta existente
 		// substitui um registro existente em uma linha com o registro associado ao idProposta recebido nos argumentos
-
-		
-
-
-
-
-		
-
-
+		ok, err := stub.ReplaceRow(tableName, row)
+		if err != nil {
+			return nil, fmt.Errorf("registrarProposta (replace) failed. %s", err)
+		}
+		if !ok {
+			return nil, errors.New("registrarProposta (replace) failed. Row with given key does not exist")
+		}
+	}
+	
 	fmt.Println("Proposta criada!")
+
+	if boletoEmitido && assinaturaBeneficiario && assinaturaIFBeneficiario {
+		url := "https://bc-desafio.mybluemix.net/atualizar"
+		fmt.Println("URL:>", url)
+
+		// Formato:
+		// { "id_proposta": "da39a3ee5e6b4b0d3255bf", "cpf_pagador": "373.745.808.20", "boletoPago": true }
+		jsonToSend := fmt.Sprintf("{ \"id_proposta\": \"%s\", \"cpf_pagador\": \"%s\", \"boletoPago\": true }", idProposta, cpfPagador)
+		fmt.Println("JSON to send:>", jsonToSend)
+
+		var jsonStr = []byte(jsonToSend)
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonStr))
+		req.Header.Set("Content-Type", "application/json")
+
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			panic(err)
+		}
+		defer resp.Body.Close()
+
+		fmt.Println("response Status:", resp.Status)
+		fmt.Println("response Headers:", resp.Header)
+		body, _ := ioutil.ReadAll(resp.Body)
+		fmt.Println("response Body:", string(body))
+	}
+
 
 	return nil, nil
 }
@@ -226,10 +316,12 @@ func (t *BoletoPropostaChaincode) Query(stub shim.ChaincodeStubInterface, functi
 	// Estrutura de Seleção para escolher qual função será executada, 
 	// de acordo com a funcao chamada
 
+	switch function {
 
+		case "consultarProposta":
+		return t.consultarProposta(stub, args) 
 
-
-
+	}
 
 	fmt.Println("query encontrou a func: " + function) 
 
@@ -243,52 +335,134 @@ func (t *BoletoPropostaChaincode) consultarProposta(stub shim.ChaincodeStubInter
 	
 	//var resProposta Proposta		// Proposta
 	var propostaAsBytes []byte		// retorno do json em bytes
-	
+
+
 	// Verifica se a quantidade de argumentos recebidas corresponde a esperada
-
-
-
-
+	if len(args) < 1 {
+		return nil, errors.New("consultarProposta failed. Must include 1 key value")
+	}
 
 	// Obtem os valores dos argumentos e os prepara para salvar na tabela 'Proposta'
-	
-
-
+	idProposta  := args[0]
 
 	// Define o valor de coluna do registro a ser buscado
-	
-
-
+	var columns []shim.Column
+	col1 := shim.Column{Value: &shim.Column_String_{String_: idProposta}}
+	columns = append(columns, col1)
 
 	// Consultar a proposta na tabela 'Proposta'
-	
-
-
-
+	rowChannel, err := stub.GetRows(tableName, columns)
+			
 
 	// Tratamento para o caso de não encontrar nenhuma proposta correspondente
+	if err != nil {
+		return nil, fmt.Errorf("consultarProposta operation failed. %s", err)
+	}
+
+	var rows []shim.Row
+	for {
+		select {
+		case row, ok := <-rowChannel:
+			if !ok {
+				rowChannel = nil
+			} else {
+				rows = append(rows, row)
+			}
+		}
+		if rowChannel == nil {
+			break
+		}
+	}
+
+	var propostas []Proposta
+
+	for i := 0; i < len(rows); i++ {
+		dadosAceite               := rows[i].Columns[1].GetString_()
+		cpfPagador                := rows[i].Columns[2].GetString_()
+		cnpjBeneficiario          := rows[i].Columns[3].GetString_()
+		boletoEmitido             := rows[i].Columns[4].GetBool()
+		assinaturaBeneficiario    := rows[i].Columns[5].GetBool()
+		assinaturaIFBeneficiario  := rows[i].Columns[6].GetBool()
+
+		// Converter o objeto da Proposta para Bytes, para retorná-lo em formato JSON
+
+		proposta := Proposta{IdProposta               : idProposta, 
+							DadosAceite               : dadosAceite,
+							CpfPagador                : cpfPagador,
+							CNPJBeneficiario          : cnpjBeneficiario,
+							BoletoEmitido             : boletoEmitido,
+							AssinaturaBeneficiario    : assinaturaBeneficiario,
+							AssinaturaIFBeneficiario  : assinaturaIFBeneficiario}
+
+		propostas = append(propostas, proposta)
+	}
 	
-
-
-
-
-
-	// Criação do objeto Proposta	
-	
-
-
-
-
-
-
-	
-
-	// Converter o objeto da Proposta para Bytes, para retorná-lo em formato JSON
-	
-
-
-
 
 	// retorna o objeto em bytes
+	
+	propostaAsBytes, err = json.Marshal(propostas)
+	if err != nil {
+		return nil, fmt.Errorf("consultarProposta operation failed. Error marshaling JSON: %s", err)
+	}
+
 	return propostaAsBytes, nil
+	//return propostaAsBytes, nil
+}
+
+
+// isCaller: função utilizada para verificar quem é o caller da chamada
+func (t *BoletoPropostaChaincode) isCaller(stub shim.ChaincodeStubInterface, certificate []byte) (bool, error) {
+	fmt.Println("Check caller...")
+
+	// In order to enforce access control, we require that the
+	// metadata contains the signature under the signing key corresponding
+	// to the verification key inside certificate of
+	// the payload of the transaction (namely, function name and args) and
+	// the transaction binding (to avoid copying attacks)
+
+	// Verify \sigma=Sign(certificate.sk, tx.Payload||tx.Binding) against certificate.vk
+	// \sigma is in the metadata
+
+	sigma, err := stub.GetCallerMetadata()
+	if err != nil {
+		return false, errors.New("Failed getting metadata")
+	}/*
+	payload, err := stub.GetPayload()
+	if err != nil {
+		return false, errors.New("Failed getting payload")
+	}
+	binding, err := stub.GetBinding()
+	if err != nil {
+		return false, errors.New("Failed getting binding")
+	}*/
+
+	fmt.Println("passed certificate [% x]", certificate)
+	fmt.Println("passed sigma [% x]", sigma)
+	//fmt.Println("passed payload [% x]", payload)
+	//fmt.Println("passed binding [% x]", binding)
+
+	// valida se os slices são iguais
+	if !reflect.DeepEqual(certificate, sigma) {
+		fmt.Println("Invalid signature")
+		return false, errors.New("Certificado inválido")
+	}	
+
+	/*
+	ok, err := stub.VerifySignature(
+		certificate,
+		sigma,
+		append(payload, binding...),
+	)
+	if err != nil {
+		fmt.Println("Failed checking signature [%s]", err)
+		return ok, err
+	} 
+	if !ok {
+		fmt.Println("Invalid signature")
+	}*/
+
+	fmt.Println("Check caller...Verified!")
+	// Certificado válido
+	return true, nil
+	//return ok, err
 }
